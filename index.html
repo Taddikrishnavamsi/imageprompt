@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Prompt & Image Gallery</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* Basic Styling */
+        body {
+            font-family: 'Orbitron', sans-serif;
+            line-height: 1.6;
+            background-color: #000;
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: rgba(10, 10, 10, 0.7);
+            border: 2px solid;
+            border-image-slice: 1;
+            border-image-source: linear-gradient(135deg, #12f9ff, #ff00d4, #00ffae, #9800ff);
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 0 24px #12f9ff, 0 0 30px #ff00d4;
+            backdrop-filter: blur(3px);
+        }
+
+        h1 {
+            color: #fff;
+            text-shadow: 0 0 8px #12f9ff, 0 0 12px #12f9ff, 0 0 20px #12f9ff;
+            text-align: center;
+        }
+
+        /* Form Styling */
+        #content-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid #ff00d4;
+        }
+
+        textarea, input[type="file"], input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #12f9ff;
+            border-radius: 5px;
+            background-color: #111;
+            color: #fff;
+            margin-bottom: 0.5rem; /* Add a little space between inputs */
+            box-shadow: 0 0 5px #12f9ff inset;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        button {
+            background-color: #ff00d4;
+            color: #fff;
+            border: 1px solid #ff00d4;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s ease, box-shadow 0.2s ease;
+            text-shadow: 0 0 5px #fff;
+            box-shadow: 0 0 16px #00ffae, 0 0 20px #ff00d4;
+        }
+
+        button:hover {
+            background-color: #12f9ff;
+            border-color: #12f9ff;
+            box-shadow: 0 0 20px #12f9ff, 0 0 30px #00ffae;
+        }
+
+        /* Unified Gallery Section Styling */
+        .gallery-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 32px;
+            padding: 0; /* Remove padding as container has it */
+            background: transparent;
+            margin-top: 40px; /* Add some space above the new section */
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        .gallery-card {
+            background: #111;
+            border-radius: 22px;
+            border: 1px solid #9800ff;
+            box-shadow: 0 0 15px rgba(152, 0, 255, 0.5);
+            overflow: hidden;
+            transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+            display: flex; /* Use flexbox for card content */
+            flex-direction: column; /* Stack image and caption */
+        }
+
+        .gallery-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 0 24px #12f9ff, 0 0 30px #ff00d4;
+            border-color: #ff00d4;
+        }
+
+        .gallery-img {
+            width: 100%;
+            height: 220px;
+            object-fit: contain; /* Ensures image covers the area without distortion */
+            display: block; /* Remove extra space below image */
+            cursor: pointer; /* Indicate the image is clickable */
+        }
+
+        .gallery-img.editable {
+            cursor: pointer;
+            outline: 3px dashed #12f9ff;
+            outline-offset: -5px;
+        }
+
+        .gallery-caption {
+            padding: 28px 24px 22px;
+            text-align: left;
+            flex-grow: 1; /* Allows caption to take remaining space if card is flex */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between; /* Push description to bottom if needed */
+            flex-grow: 1;
+        }
+
+        .gallery-caption-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 9px;
+        }
+
+        .caption-buttons {
+            display: flex;
+            gap: 8px; /* Adds space between buttons */
+        }
+
+        .gallery-title {
+            font-size: 1.25rem;
+            margin: 0; /* Remove default margin */
+            font-weight: 600;
+            color: #fff;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .copy-btn {
+            background-color: transparent;
+            color: #12f9ff;
+            border: 1px solid #12f9ff;
+            padding: 4px 8px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .edit-btn {
+            background-color: transparent;
+            color: #00ffae;
+            border: 1px solid #00ffae;
+            padding: 4px 8px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .edit-btn:hover {
+            background-color: #00ffae;
+            color: #000;
+        }
+
+        .delete-btn {
+            background-color: transparent;
+            color: #ff00d4;
+            border: 1px solid #ff00d4;
+            padding: 4px 8px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .delete-btn:hover {
+            background-color: #ff00d4;
+            color: #fff;
+        }
+
+        .gallery-desc {
+            font-size: 1rem;
+            color: #ccc;
+            font-family: 'Orbitron', sans-serif;
+            white-space: pre-wrap; /* Respect newlines in the prompt */
+            display: none; /* Hide prompt text on the main card view */
+        }
+
+        .gallery-desc-editor {
+            width: 100%;
+            min-height: 80px; /* Give it some initial height */
+            font-family: 'Orbitron', sans-serif;
+            background-color: #111;
+            color: #fff;
+            border: 1px solid #12f9ff;
+        }
+
+        /* Responsive adjustments for the new gallery */
+        @media (max-width: 600px) { /* Adjust breakpoint for gallery cards if needed */
+            .gallery-section {
+                padding: 20px;
+            }
+        }
+
+        /* Lightbox Styling */
+        .lightbox {
+            position: fixed;
+            z-index: 1000;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0s 0.3s;
+        }
+
+        .lightbox.visible {
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 0.3s ease;
+        }
+
+        .lightbox-card {
+            background: #000;
+            border-radius: 16px;
+            border: 2px solid #ff00d4;
+            box-shadow: 0 0 24px #ff00d4, 0 0 30px #9800ff;
+            max-width: 70vw;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Important for border-radius on image */
+        }
+
+        .lightbox-content {
+            width: 100%; /* Image takes full width of the card */
+            max-height: 70vh; /* Limit image height to leave room for prompt */
+            object-fit: contain;
+        }
+
+        .lightbox-prompt {
+            color: #fff;
+            text-align: left;
+            padding: 15px 20px;
+            font-size: 1rem;
+            line-height: 1.5;
+            overflow-y: auto; /* Add scroll if prompt is very long */
+            background: #111;
+            border-top: 1px solid #ff00d4;
+            flex-shrink: 0; /* Prevent prompt from shrinking */
+        }
+
+        .lightbox-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            font-size: 40px;
+            color: #ff00d4;
+            text-shadow: 0 0 10px #ff00d4;
+            cursor: pointer;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+
+        .lightbox-prev,
+        .lightbox-next {
+            cursor: pointer;
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 3rem;
+            font-weight: bold;
+            color: #12f9ff;
+            text-shadow: 0 0 8px #12f9ff;
+            padding: 16px;
+            user-select: none; /* Prevent text selection */
+            transition: color 0.2s, text-shadow 0.2s;
+        }
+
+        .lightbox-prev { left: 15px; }
+        .lightbox-next { right: 15px; }
+
+        .lightbox-prev:hover,
+        .lightbox-next:hover {
+            color: #fff;
+            text-shadow: 0 0 15px #12f9ff;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>AI Prompt & Image Gallery</h1>
+
+        <!-- Form to add new content -->
+        <form id="content-form">
+            <textarea id="prompt-input" placeholder="Enter the prompt used to generate the image..." rows="4" required></textarea>
+            <input type="file" id="image-input" accept="image/*">
+            <input type="text" id="image-url-input" placeholder="...or paste an image URL here">
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" style="flex-grow: 1;">Save Entry</button>
+                <button type="button" id="export-json-btn" style="flex-grow: 1;">Export to JSON</button>
+            </div>
+        </form>
+
+        <!-- This container is now empty and will be populated by JavaScript -->
+    </div>
+
+    <!-- Unified Gallery Section - Populated by JavaScript -->
+    <section id="gallery-container" class="gallery-section">
+    </section>
+
+    <!-- Lightbox Structure -->
+    <div id="lightbox" class="lightbox">
+        <span class="lightbox-close">&times;</span>
+        <span class="lightbox-prev">&#10094;</span>
+        <span class="lightbox-next">&#10095;</span>
+        <div class="lightbox-card">
+            <img class="lightbox-content" id="lightbox-img">
+            <div class="lightbox-prompt" id="lightbox-prompt"></div>
+        </div>
+    </div>
+
+    <script>
+        const contentForm = document.getElementById('content-form');
+        const promptInput = document.getElementById('prompt-input');
+        const imageInput = document.getElementById('image-input');
+        const imageUrlInput = document.getElementById('image-url-input');
+        const galleryContainer = document.getElementById('gallery-container');
+
+        // This will hold our gallery data in memory instead of using localStorage
+        let posts = [];
+
+        // --- Main Application Logic ---
+
+        // Load initial posts from the JSON file when the page loads
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('./gallery-data.json');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                posts = await response.json();
+                renderPosts();
+            } catch (error) {
+                console.error("Could not load gallery-data.json:", error);
+                galleryContainer.innerHTML = `<p style="color: #ff00d4; text-align: center;">Error: Could not load gallery data. Make sure 'gallery-data.json' exists and is in the same directory.</p>`;
+            }
+
+            // Set up the export button listener
+            document.getElementById('export-json-btn').addEventListener('click', () => {
+                exportPostsToJson();
+            });
+        });
+
+        // Handle form submission
+        contentForm.addEventListener('submit', (e) => {
+            e.preventDefault(); // Prevent the page from reloading
+
+            const promptText = promptInput.value;
+            const imageFile = imageInput.files[0];
+            const imageUrl = imageUrlInput.value.trim();
+
+            if (!promptText || (!imageFile && !imageUrl)) {
+                alert('Please provide a prompt and either upload an image or paste an image URL.');
+                return;
+            }
+
+            // Prioritize the uploaded file if both are provided
+            if (imageFile) {
+                // Use FileReader to convert image to a base64 string for storage
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const imageDataUrl = event.target.result;
+                    savePost({ prompt: promptText, image: imageDataUrl });
+                };
+                reader.readAsDataURL(imageFile);
+            } else {
+                // Otherwise, use the provided URL
+                savePost({ prompt: promptText, image: imageUrl });
+            }
+        });
+
+        function savePost(post) {
+            // Add the new post to the beginning of the in-memory array
+            posts.unshift(post);
+            
+            // Clear the form and re-render the posts
+            contentForm.reset();
+            renderPosts();
+            alert('Entry saved to the current session. Click "Export to JSON" to save your changes to the file.');
+        }
+
+        function deletePost(indexToDelete) {
+            // Use a confirmation dialog before deleting
+            if (!confirm('Are you sure you want to delete this entry?')) {
+                return; // Stop if the user cancels
+            }
+            posts.splice(indexToDelete, 1); // Remove the item at the specified index
+            renderPosts(); // Re-render the gallery to show the change
+        }
+
+        function updatePost(indexToUpdate, { newPrompt, newImage }) {
+            if (posts[indexToUpdate]) {
+                if (newPrompt) {
+                    posts[indexToUpdate].prompt = newPrompt;
+                }
+                if (newImage) {
+                    posts[indexToUpdate].image = newImage;
+                }
+            }
+        }
+
+        function exportPostsToJson() {
+            const jsonString = JSON.stringify(posts, null, 2); // Pretty-print with 2-space indentation
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'gallery-data.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function renderPosts() {
+            galleryContainer.innerHTML = ''; // Clear existing content
+
+            if (posts.length === 0) {
+                galleryContainer.innerHTML = `<p style="color: #ccc; text-align: center;">Your gallery is empty. Add an entry using the form above.</p>`;
+                return;
+            }
+
+            posts.forEach((post, index) => {
+                // Guard clause to prevent errors from malformed data in localStorage
+                if (!post || typeof post.prompt === 'undefined' || typeof post.image === 'undefined') {
+                    console.warn(`Skipping invalid post data at index: ${index}`, post);
+                    return; // Skip this iteration and continue with the next post
+                }
+
+                // --- Create Gallery Card ---
+                const card = document.createElement('div');
+                card.className = 'gallery-card';
+
+                // Image
+                const img = document.createElement('img');
+                img.className = 'gallery-img';
+                img.src = post.image;
+                img.alt = `AI generated image for prompt: ${(post.prompt || '').substring(0, 50)}...`;
+                img.dataset.index = index; // Add index for lightbox navigation
+
+                // Add an error handler for broken image links or CORS issues
+                // Use a self-contained SVG data URI as a fallback to ensure it works offline.
+                img.onerror = function() {
+                    this.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgNjAwIDQwMCI+PHJlY3Qgd2lkdGg9IjYwMCIgaGVpZ2h0PSI0MDAiIGZpbGw9IiMxMTEiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9Ik9yYml0cm9uLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjI0IiBmaWxsPSIjZmYwMGQ0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIj5FcnJvciBMb2FkaW5nIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+                    this.alt = 'Error: Image could not be loaded from the provided URL.';
+                };
+
+                // Caption
+                const caption = document.createElement('div');
+                caption.className = 'gallery-caption';
+
+                // Caption Header
+                const captionHeader = document.createElement('div');
+                captionHeader.className = 'gallery-caption-header';
+
+                // Title
+                const title = document.createElement('h3');
+                title.className = 'gallery-title';
+                title.textContent = 'Prompt';
+
+                // Container for buttons
+                const buttonContainer = document.createElement('div');
+                buttonContainer.className = 'caption-buttons';
+
+                // Edit Button
+                const editBtn = document.createElement('button');
+                editBtn.className = 'edit-btn';
+                editBtn.textContent = 'Edit';
+                editBtn.onclick = function() {
+                    toggleEditMode(card, index);
+                };
+
+                // Copy Button for the caption
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'copy-btn';
+                copyBtn.textContent = 'Copy';
+                copyBtn.onclick = function() {
+                    navigator.clipboard.writeText(post.prompt || '').then(() => {
+                        copyBtn.textContent = 'Copied!';
+                        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+                    }).catch(err => {
+                        console.error('Failed to copy text: ', err);
+                    });
+                };
+
+                // Delete Button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.onclick = function() {
+                    deletePost(index);
+                };
+
+                captionHeader.appendChild(title);
+                buttonContainer.appendChild(editBtn);
+                buttonContainer.appendChild(copyBtn);
+                buttonContainer.appendChild(deleteBtn);
+                captionHeader.appendChild(buttonContainer);
+
+                // Description (the full prompt)
+                const desc = document.createElement('p');
+                desc.className = 'gallery-desc';
+                desc.textContent = post.prompt || '';
+
+                caption.appendChild(captionHeader);
+                caption.appendChild(desc);
+
+                card.appendChild(img);
+                card.appendChild(caption);
+                galleryContainer.appendChild(card);
+            });
+        }
+
+        function toggleEditMode(card, index) {
+            const caption = card.querySelector('.gallery-caption');
+            const descElement = card.querySelector('.gallery-desc');
+            const imgElement = card.querySelector('.gallery-img');
+            const buttonContainer = card.querySelector('.caption-buttons');
+            const originalButtons = buttonContainer.innerHTML; // Save original buttons
+            const originalImageSrc = imgElement.src;
+            let newImageDataUrl = null;
+
+            // --- Set up image editing ---
+            imgElement.classList.add('editable');
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            fileInput.style.display = 'none';
+            card.appendChild(fileInput); // Add to card to keep it in scope
+
+            imgElement.onclick = () => {
+                fileInput.click();
+            };
+
+            fileInput.onchange = () => {
+                const file = fileInput.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    newImageDataUrl = e.target.result;
+                    imgElement.src = newImageDataUrl; // Show preview
+                };
+                reader.readAsDataURL(file);
+            };
+
+            // Create a textarea for editing
+            const editor = document.createElement('textarea');
+            editor.className = 'gallery-desc-editor';
+            editor.value = descElement.textContent;
+
+            // Replace the <p> with the <textarea>
+            caption.replaceChild(editor, descElement);
+            editor.focus();
+
+            // Create Save and Cancel buttons
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'copy-btn'; // Re-use a style, e.g., green-ish
+            saveBtn.textContent = 'Save';
+            // No need for inline styles, it will inherit the .copy-btn look
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'delete-btn'; // Re-use a style, e.g., red-ish
+            cancelBtn.textContent = 'Cancel';
+
+            // --- Event Handlers for new buttons ---
+
+            function exitEditMode() {
+                // Create a new <p> element to replace the editor
+                const newDesc = document.createElement('p');
+                newDesc.className = 'gallery-desc';
+                newDesc.textContent = descElement.textContent; // Restore original text
+
+                caption.replaceChild(newDesc, editor);
+                buttonContainer.innerHTML = originalButtons; // Restore original buttons
+                imgElement.src = originalImageSrc; // Restore original image
+                imgElement.classList.remove('editable');
+                imgElement.onclick = null; // Remove the edit-mode click handler
+                card.removeChild(fileInput); // Clean up the file input element
+
+                // We must re-attach event listeners since innerHTML wipes them
+                buttonContainer.querySelector('.edit-btn').onclick = () => toggleEditMode(card, index);
+                const copyBtn = buttonContainer.querySelector('.copy-btn');
+                copyBtn.onclick = () => { navigator.clipboard.writeText(newDesc.textContent).then(() => { copyBtn.textContent = 'Copied!'; setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000); }); };
+                buttonContainer.querySelector('.delete-btn').onclick = () => deletePost(index);
+
+            }
+
+            saveBtn.onclick = () => {
+                const newPromptText = editor.value;
+                if (newPromptText.trim() === '') {
+                    alert('Prompt cannot be empty.');
+                    return;
+                }
+                updatePost(index, { newPrompt: newPromptText, newImage: newImageDataUrl });
+                renderPosts(); // Re-render the entire gallery to show the update
+            };
+
+            cancelBtn.onclick = () => {
+                exitEditMode();
+            };
+
+            buttonContainer.innerHTML = ''; // Clear existing buttons
+            buttonContainer.appendChild(saveBtn);
+            buttonContainer.appendChild(cancelBtn);
+        }
+
+        // --- Lightbox Logic ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const lightbox = document.getElementById('lightbox');
+            const lightboxImg = document.getElementById('lightbox-img');
+            const lightboxPrompt = document.getElementById('lightbox-prompt');
+            const lightboxClose = document.querySelector('.lightbox-close');
+            const lightboxPrev = document.querySelector('.lightbox-prev');
+            const lightboxNext = document.querySelector('.lightbox-next');
+            
+            let currentImageIndex = 0;
+
+            function showImage(index) {
+                if (index >= posts.length || index < 0) {
+                    console.error("Image index out of bounds");
+                    return;
+                }
+                currentImageIndex = index;
+                lightboxImg.src = posts[currentImageIndex].image;
+                lightboxPrompt.textContent = posts[currentImageIndex].prompt || '';
+                lightbox.classList.add('visible');
+            }
+
+            function showNextImage() {
+                if (posts.length === 0) return;
+                const nextIndex = (currentImageIndex + 1) % posts.length; // Loop to start
+                showImage(nextIndex);
+            }
+
+            function showPrevImage() {
+                if (posts.length === 0) return;
+                const prevIndex = (currentImageIndex - 1 + posts.length) % posts.length; // Loop to end
+                showImage(prevIndex);
+            }
+
+            function closeLightbox() {
+                lightbox.classList.remove('visible');
+                // Optional: Reset src to prevent showing old image briefly on next open
+                setTimeout(() => { 
+                    lightboxImg.src = ''; 
+                    lightboxPrompt.textContent = '';
+                }, 300);
+            }
+
+            // Event Listeners
+            galleryContainer.addEventListener('click', (e) => {
+                if (e.target.classList.contains('gallery-img') && !e.target.classList.contains('editable')) {
+                    const index = parseInt(e.target.dataset.index, 10);
+                    showImage(index);
+                }
+            });
+
+            lightboxNext.addEventListener('click', showNextImage);
+            lightboxPrev.addEventListener('click', showPrevImage);
+            lightboxClose.addEventListener('click', closeLightbox);
+            lightbox.addEventListener('click', (e) => {
+                if (e.target === lightbox) { // Only close if clicking the background
+                    closeLightbox();
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>
