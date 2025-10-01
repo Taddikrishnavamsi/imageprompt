@@ -7,6 +7,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Add the Supabase client library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         /* Basic Styling */
         body {
@@ -316,10 +319,7 @@
             <textarea id="prompt-input" placeholder="Enter the prompt used to generate the image..." rows="4" required></textarea>
             <input type="file" id="image-input" accept="image/*">
             <input type="text" id="image-url-input" placeholder="...or paste an image URL here">
-            <div style="display: flex; gap: 1rem;">
-                <button type="submit" style="flex-grow: 1;">Save Entry</button>
-                <button type="button" id="export-json-btn" style="flex-grow: 1;">Export to JSON</button>
-            </div>
+            <button type="submit">Save Entry</button>
         </form>
 
         <!-- This container is now empty and will be populated by JavaScript -->
@@ -347,33 +347,37 @@
         const imageUrlInput = document.getElementById('image-url-input');
         const galleryContainer = document.getElementById('gallery-container');
 
-        // This will hold our gallery data in memory instead of using localStorage
+        // --- Supabase Setup ---
+        // IMPORTANT: Replace with your actual Supabase URL and Anon Key from Part 1
+        const SUPABASE_URL = 'https://qbgtvhemdkphrzzrftix.supabase.co'; 
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiZ3R2aGVtZGtwaHJ6enJmdGl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzMDUwMjYsImV4cCI6MjA3NDg4MTAyNn0.Bg1oa_4s4FVr_2Hk-Z-2sva5o_PZGoGOLA8glCXDcRc';
+
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // This will hold our gallery data, fetched from Supabase
         let posts = [];
 
         // --- Main Application Logic ---
 
-        // Load initial posts from the JSON file when the page loads
+        // Load initial posts from Supabase when the page loads
         document.addEventListener('DOMContentLoaded', async () => {
+            if (SUPABASE_URL === 'YOUR_SUPABASE_URL' || SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
+                galleryContainer.innerHTML = `<p style="color: #ff00d4; text-align: center;">Error: Supabase credentials are not set. Please update the script with your URL and Anon Key.</p>`;
+                return;
+            }
             try {
-                const response = await fetch('./gallery-data.json');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                posts = await response.json();
+                const { data, error } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
+                if (error) throw error;
+                posts = data;
                 renderPosts();
             } catch (error) {
-                console.error("Could not load gallery-data.json:", error);
-                galleryContainer.innerHTML = `<p style="color: #ff00d4; text-align: center;">Error: Could not load gallery data. Make sure 'gallery-data.json' exists and is in the same directory.</p>`;
+                console.error("Error loading posts from Supabase:", error);
+                galleryContainer.innerHTML = `<p style="color: #ff00d4; text-align: center;">Error: Could not load gallery data from the database.</p>`;
             }
-
-            // Set up the export button listener
-            document.getElementById('export-json-btn').addEventListener('click', () => {
-                exportPostsToJson();
-            });
         });
 
         // Handle form submission
-        contentForm.addEventListener('submit', (e) => {
+        contentForm.addEventListener('submit', async (e) => {
             e.preventDefault(); // Prevent the page from reloading
 
             const promptText = promptInput.value;
@@ -385,62 +389,99 @@
                 return;
             }
 
-            // Prioritize the uploaded file if both are provided
-            if (imageFile) {
-                // Use FileReader to convert image to a base64 string for storage
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    const imageDataUrl = event.target.result;
-                    savePost({ prompt: promptText, image: imageDataUrl });
-                };
-                reader.readAsDataURL(imageFile);
-            } else {
-                // Otherwise, use the provided URL
-                savePost({ prompt: promptText, image: imageUrl });
+            const submitButton = contentForm.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            submitButton.textContent = 'Saving...';
+
+            try {
+                let finalImageUrl = imageUrl;
+
+                // If a file is uploaded, prioritize it. Upload to Supabase Storage.
+                if (imageFile) {
+                    const fileName = `${Date.now()}-${imageFile.name}`;
+                    const { data: uploadData, error: uploadError } = await supabase.storage
+                        .from('gallery-images')
+                        .upload(fileName, imageFile);
+
+                    if (uploadError) throw uploadError;
+
+                    // Get the public URL for the uploaded image
+                    const { data: urlData } = supabase.storage
+                        .from('gallery-images')
+                        .getPublicUrl(fileName);
+                    
+                    finalImageUrl = urlData.publicUrl;
+                }
+
+                // Save the prompt and the final image URL to the 'posts' table
+                const { data: postData, error: postError } = await supabase
+                    .from('posts')
+                    .insert([{ prompt: promptText, image_url: finalImageUrl }])
+                    .select()
+                    .single();
+
+                if (postError) throw postError;
+
+                // Add the new post to the top of our local array and re-render
+                posts.unshift(postData);
+                renderPosts();
+                contentForm.reset();
+
+            } catch (error) {
+                console.error('Error saving post:', error);
+                alert(`Failed to save entry: ${error.message}`);
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = 'Save Entry';
             }
         });
 
-        function savePost(post) {
-            // Add the new post to the beginning of the in-memory array
-            posts.unshift(post);
-            
-            // Clear the form and re-render the posts
-            contentForm.reset();
-            renderPosts();
-            alert('Entry saved to the current session. Click "Export to JSON" to save your changes to the file.');
-        }
-
-        function deletePost(indexToDelete) {
+        async function deletePost(postId, indexToDelete) {
             // Use a confirmation dialog before deleting
             if (!confirm('Are you sure you want to delete this entry?')) {
                 return; // Stop if the user cancels
             }
-            posts.splice(indexToDelete, 1); // Remove the item at the specified index
-            renderPosts(); // Re-render the gallery to show the change
-        }
 
-        function updatePost(indexToUpdate, { newPrompt, newImage }) {
-            if (posts[indexToUpdate]) {
-                if (newPrompt) {
-                    posts[indexToUpdate].prompt = newPrompt;
+            try {
+                // Also delete the image from storage to keep things clean
+                const postToDelete = posts[indexToDelete];
+                if (postToDelete && postToDelete.image_url) {
+                    const imageUrl = new URL(postToDelete.image_url);
+                    const imagePath = imageUrl.pathname.split('/gallery-images/')[1];
+                    if (imagePath) {
+                        await supabase.storage.from('gallery-images').remove([imagePath]);
+                    }
                 }
-                if (newImage) {
-                    posts[indexToUpdate].image = newImage;
-                }
+
+                // Delete the post from the database
+                const { error } = await supabase.from('posts').delete().eq('id', postId);
+                if (error) throw error;
+
+                // Remove from local array and re-render
+                posts.splice(indexToDelete, 1);
+                renderPosts();
+
+            } catch (error) {
+                console.error('Error deleting post:', error);
+                alert(`Failed to delete entry: ${error.message}`);
             }
         }
 
-        function exportPostsToJson() {
-            const jsonString = JSON.stringify(posts, null, 2); // Pretty-print with 2-space indentation
-            const blob = new Blob([jsonString], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'gallery-data.json';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+        async function updatePost(postId, indexToUpdate, { newPrompt, newImage }) {
+            try {
+                const updates = { prompt: newPrompt };
+                // Note: Image updating is complex and not implemented in this version.
+                // We will only update the prompt text for now.
+                const { data, error } = await supabase.from('posts').update(updates).eq('id', postId).select().single();
+                if (error) throw error;
+
+                // Update local array and re-render
+                posts[indexToUpdate] = data;
+                renderPosts();
+            } catch (error) {
+                console.error('Error updating post:', error);
+                alert(`Failed to update entry: ${error.message}`);
+            }
         }
 
         function renderPosts() {
@@ -453,7 +494,7 @@
 
             posts.forEach((post, index) => {
                 // Guard clause to prevent errors from malformed data in localStorage
-                if (!post || typeof post.prompt === 'undefined' || typeof post.image === 'undefined') {
+                if (!post || typeof post.prompt === 'undefined' || typeof post.image_url === 'undefined') {
                     console.warn(`Skipping invalid post data at index: ${index}`, post);
                     return; // Skip this iteration and continue with the next post
                 }
@@ -465,7 +506,7 @@
                 // Image
                 const img = document.createElement('img');
                 img.className = 'gallery-img';
-                img.src = post.image;
+                img.src = post.image_url;
                 img.alt = `AI generated image for prompt: ${(post.prompt || '').substring(0, 50)}...`;
                 img.dataset.index = index; // Add index for lightbox navigation
 
@@ -498,7 +539,7 @@
                 editBtn.className = 'edit-btn';
                 editBtn.textContent = 'Edit';
                 editBtn.onclick = function() {
-                    toggleEditMode(card, index);
+                    toggleEditMode(card, post.id, index);
                 };
 
                 // Copy Button for the caption
@@ -519,7 +560,7 @@
                 deleteBtn.className = 'delete-btn';
                 deleteBtn.textContent = 'Delete';
                 deleteBtn.onclick = function() {
-                    deletePost(index);
+                    deletePost(post.id, index);
                 };
 
                 captionHeader.appendChild(title);
@@ -542,7 +583,7 @@
             });
         }
 
-        function toggleEditMode(card, index) {
+        function toggleEditMode(card, postId, index) {
             const caption = card.querySelector('.gallery-caption');
             const descElement = card.querySelector('.gallery-desc');
             const imgElement = card.querySelector('.gallery-img');
@@ -551,6 +592,7 @@
             const originalImageSrc = imgElement.src;
             let newImageDataUrl = null;
 
+            // NOTE: Image editing is disabled for this version as it adds complexity.
             // --- Set up image editing ---
             imgElement.classList.add('editable');
             const fileInput = document.createElement('input');
@@ -559,20 +601,21 @@
             fileInput.style.display = 'none';
             card.appendChild(fileInput); // Add to card to keep it in scope
 
-            imgElement.onclick = () => {
-                fileInput.click();
-            };
+            // imgElement.onclick = () => {
+            //     fileInput.click();
+            // };
 
-            fileInput.onchange = () => {
-                const file = fileInput.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    newImageDataUrl = e.target.result;
-                    imgElement.src = newImageDataUrl; // Show preview
-                };
-                reader.readAsDataURL(file);
-            };
+            // fileInput.onchange = () => {
+            //     const file = fileInput.files[0];
+            //     if (!file) return;
+            //     const reader = new FileReader();
+            //     reader.onload = (e) => {
+            //         newImageDataUrl = e.target.result;
+            //         imgElement.src = newImageDataUrl; // Show preview
+            //     };
+            //     reader.readAsDataURL(file);
+            // };
+            imgElement.title = "Image editing is not supported in this version.";
 
             // Create a textarea for editing
             const editor = document.createElement('textarea');
@@ -609,10 +652,10 @@
                 card.removeChild(fileInput); // Clean up the file input element
 
                 // We must re-attach event listeners since innerHTML wipes them
-                buttonContainer.querySelector('.edit-btn').onclick = () => toggleEditMode(card, index);
+                buttonContainer.querySelector('.edit-btn').onclick = () => toggleEditMode(card, postId, index);
                 const copyBtn = buttonContainer.querySelector('.copy-btn');
                 copyBtn.onclick = () => { navigator.clipboard.writeText(newDesc.textContent).then(() => { copyBtn.textContent = 'Copied!'; setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000); }); };
-                buttonContainer.querySelector('.delete-btn').onclick = () => deletePost(index);
+                buttonContainer.querySelector('.delete-btn').onclick = () => deletePost(postId, index);
 
             }
 
@@ -622,8 +665,8 @@
                     alert('Prompt cannot be empty.');
                     return;
                 }
-                updatePost(index, { newPrompt: newPromptText, newImage: newImageDataUrl });
-                renderPosts(); // Re-render the entire gallery to show the update
+                // newImage is null because we disabled image editing for simplicity
+                updatePost(postId, index, { newPrompt: newPromptText, newImage: null });
             };
 
             cancelBtn.onclick = () => {
@@ -652,7 +695,7 @@
                     return;
                 }
                 currentImageIndex = index;
-                lightboxImg.src = posts[currentImageIndex].image;
+                lightboxImg.src = posts[currentImageIndex].image_url;
                 lightboxPrompt.textContent = posts[currentImageIndex].prompt || '';
                 lightbox.classList.add('visible');
             }
