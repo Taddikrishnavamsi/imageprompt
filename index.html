@@ -352,29 +352,12 @@
         const SUPABASE_URL = 'https://qbgtvhemdkphrzzrftix.supabase.co'; 
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiZ3R2aGVtZGtwaHJ6enJmdGl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzMDUwMjYsImV4cCI6MjA3NDg4MTAyNn0.Bg1oa_4s4FVr_2Hk-Z-2sva5o_PZGoGOLA8glCXDcRc';
 
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // Correctly initialize the Supabase client.
+        // The global 'supabase' object is provided by the script tag. We create our client from it.
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // This will hold our gallery data, fetched from Supabase
         let posts = [];
-
-        // --- Main Application Logic ---
-
-        // Load initial posts from Supabase when the page loads
-        document.addEventListener('DOMContentLoaded', async () => {
-            if (SUPABASE_URL === 'YOUR_SUPABASE_URL' || SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
-                galleryContainer.innerHTML = `<p style="color: #ff00d4; text-align: center;">Error: Supabase credentials are not set. Please update the script with your URL and Anon Key.</p>`;
-                return;
-            }
-            try {
-                const { data, error } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
-                if (error) throw error;
-                posts = data;
-                renderPosts();
-            } catch (error) {
-                console.error("Error loading posts from Supabase:", error);
-                galleryContainer.innerHTML = `<p style="color: #ff00d4; text-align: center;">Error: Could not load gallery data from the database.</p>`;
-            }
-        });
 
         // Handle form submission
         contentForm.addEventListener('submit', async (e) => {
@@ -399,14 +382,14 @@
                 // If a file is uploaded, prioritize it. Upload to Supabase Storage.
                 if (imageFile) {
                     const fileName = `${Date.now()}-${imageFile.name}`;
-                    const { data: uploadData, error: uploadError } = await supabase.storage
+                    const { data: uploadData, error: uploadError } = await supabaseClient.storage
                         .from('gallery-images')
                         .upload(fileName, imageFile);
 
                     if (uploadError) throw uploadError;
 
                     // Get the public URL for the uploaded image
-                    const { data: urlData } = supabase.storage
+                    const { data: urlData } = supabaseClient.storage
                         .from('gallery-images')
                         .getPublicUrl(fileName);
                     
@@ -414,9 +397,9 @@
                 }
 
                 // Save the prompt and the final image URL to the 'posts' table
-                const { data: postData, error: postError } = await supabase
+                const { data: postData, error: postError } = await supabaseClient
                     .from('posts')
-                    .insert([{ prompt: promptText, image_url: finalImageUrl }])
+                    .insert({ prompt: promptText, image_url: finalImageUrl })
                     .select()
                     .single();
 
@@ -449,12 +432,12 @@
                     const imageUrl = new URL(postToDelete.image_url);
                     const imagePath = imageUrl.pathname.split('/gallery-images/')[1];
                     if (imagePath) {
-                        await supabase.storage.from('gallery-images').remove([imagePath]);
+                        await supabaseClient.storage.from('gallery-images').remove([imagePath]);
                     }
                 }
 
                 // Delete the post from the database
-                const { error } = await supabase.from('posts').delete().eq('id', postId);
+                const { error } = await supabaseClient.from('posts').delete().eq('id', postId);
                 if (error) throw error;
 
                 // Remove from local array and re-render
@@ -467,17 +450,17 @@
             }
         }
 
-        async function updatePost(postId, indexToUpdate, { newPrompt, newImage }) {
+        async function updatePost(postId, indexToUpdate, { newPrompt, newImageUrl }) {
             try {
                 const updates = { prompt: newPrompt };
                 // Note: Image updating is complex and not implemented in this version.
                 // We will only update the prompt text for now.
-                const { data, error } = await supabase.from('posts').update(updates).eq('id', postId).select().single();
+                const { data, error } = await supabaseClient.from('posts').update(updates).eq('id', postId).select().single();
                 if (error) throw error;
-
-                // Update local array and re-render
+                
+                // Update the local 'posts' array with the new data from the database.
+                // The calling function will be responsible for re-rendering the UI.
                 posts[indexToUpdate] = data;
-                renderPosts();
             } catch (error) {
                 console.error('Error updating post:', error);
                 alert(`Failed to update entry: ${error.message}`);
@@ -665,8 +648,8 @@
                     alert('Prompt cannot be empty.');
                     return;
                 }
-                // newImage is null because we disabled image editing for simplicity
-                updatePost(postId, index, { newPrompt: newPromptText, newImage: null });
+                // Update the post in the database, then re-render the gallery once.
+                updatePost(postId, index, { newPrompt: newPromptText, newImageUrl: null }).then(renderPosts);
             };
 
             cancelBtn.onclick = () => {
@@ -678,8 +661,10 @@
             buttonContainer.appendChild(cancelBtn);
         }
 
-        // --- Lightbox Logic ---
-        document.addEventListener('DOMContentLoaded', () => {
+        // --- Main Application Logic & Event Listeners ---
+        // This single listener handles all setup after the page is loaded.
+        document.addEventListener('DOMContentLoaded', async () => {
+            // --- Lightbox Setup ---
             const lightbox = document.getElementById('lightbox');
             const lightboxImg = document.getElementById('lightbox-img');
             const lightboxPrompt = document.getElementById('lightbox-prompt');
@@ -695,7 +680,7 @@
                     return;
                 }
                 currentImageIndex = index;
-                lightboxImg.src = posts[currentImageIndex].image_url;
+                lightboxImg.src = posts[currentImageIndex].image_url; // Correctly use image_url
                 lightboxPrompt.textContent = posts[currentImageIndex].prompt || '';
                 lightbox.classList.add('visible');
             }
@@ -737,6 +722,21 @@
                     closeLightbox();
                 }
             });
+
+            // --- Initial Data Load from Supabase ---
+            if (SUPABASE_URL.includes('https://qbgtvhemdkphrzzrftix.supabase.co') || SUPABASE_ANON_KEY.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiZ3R2aGVtZGtwaHJ6enJmdGl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzMDUwMjYsImV4cCI6MjA3NDg4MTAyNn0.Bg1oa_4s4FVr_2Hk-Z-2sva5o_PZGoGOLA8glCXDcRc')) {
+                galleryContainer.innerHTML = `<p style="color: #ff00d4; text-align: center;">Error: Supabase credentials have not been set. Please update the script with your URL and Anon Key.</p>`;
+                return;
+            }
+            try {
+                const { data, error } = await supabaseClient.from('posts').select('*').order('created_at', { ascending: false });
+                if (error) throw error;
+                posts = data;
+                renderPosts();
+            } catch (error) {
+                console.error("Error loading posts from Supabase:", error);
+                galleryContainer.innerHTML = `<p style="color: #ff00d4; text-align: center;">Error: Could not load gallery data from the database.</p>`;
+            }
         });
     </script>
 
