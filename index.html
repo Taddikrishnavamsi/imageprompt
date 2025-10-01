@@ -386,24 +386,33 @@
                         .from('gallery-images')
                         .upload(fileName, imageFile);
 
-                    if (uploadError) throw uploadError;
+                    if (uploadError) {
+                        // Provide specific feedback for storage upload failure
+                        console.error('Supabase Storage Upload Error:', uploadError);
+                        alert(`Image upload failed: ${uploadError.message}`);
+                        // Re-enable the button and exit
+                        submitButton.disabled = false;
+                        submitButton.textContent = 'Save Entry';
+                        return;
+                    }
 
                     // Get the public URL for the uploaded image
-                    const { data: urlData } = supabaseClient.storage
+                    const { data: urlData } = await supabaseClient.storage
                         .from('gallery-images')
                         .getPublicUrl(fileName);
                     
                     finalImageUrl = urlData.publicUrl;
                 }
 
-                // Save the prompt and the final image URL to the 'posts' table
+                // Save the prompt and the final image URL to the 'posts' table.
+                // This part now only runs if the image upload (if any) was successful.
                 const { data: postData, error: postError } = await supabaseClient
                     .from('posts')
                     .insert({ prompt: promptText, image_url: finalImageUrl })
                     .select()
                     .single();
 
-                if (postError) throw postError;
+                if (postError) throw postError; // This will be caught by the catch block below
 
                 // Add the new post to the top of our local array and re-render
                 posts.unshift(postData);
@@ -432,7 +441,13 @@
                     const imageUrl = new URL(postToDelete.image_url);
                     const imagePath = imageUrl.pathname.split('/gallery-images/')[1];
                     if (imagePath) {
-                        await supabaseClient.storage.from('gallery-images').remove([imagePath]);
+                        const { error: storageError } = await supabaseClient.storage.from('gallery-images').remove([imagePath]);
+                        if (storageError) {
+                            // If storage deletion fails, log it and stop the process.
+                            console.error('Error deleting image from storage:', storageError);
+                            alert(`Failed to delete image file from storage: ${storageError.message}`);
+                            return; // Do not proceed to delete the database record.
+                        }
                     }
                 }
 
